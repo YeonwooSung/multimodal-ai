@@ -130,3 +130,10 @@ dmypy.json
 
 # MacOS
 .DS_Store
+
+# kaggle credentials
+kaggle.json
+
+# checkpoints
+checkpoints/
+**/checkpoints/
