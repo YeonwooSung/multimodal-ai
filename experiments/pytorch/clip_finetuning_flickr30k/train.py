@@ -44,6 +44,50 @@ optimizer = optim.Adam(model.parameters(), lr=1e-5)
 labels=pd.read_csv("flicker_data/flickr30k_images/results.csv",sep="|")
 
 
+def parse_args():
+    parser = argparse.ArgumentParser(description="Clip Trainer")
+    parser.add_argument("-p", "--portion",type=float,default=0.2, help="fraction of the full data to use for train-test split", dest="prop_data")
+    parser.add_argument("-tr", "--train_prop",type=float,default=0.7,help="train proportion of data", dest="train_prop")
+    parser.add_argument("-e", "--epochs",type=int,default=5, help="Number of Epochs", dest="n_epochs")
+    parser.add_argument("-bs", "--batch_size",type=int,default=45, help="Batch Size", dest="batch_size")
+    parser.add_argument("-n", "--runname",type=str,default="clip-ft", help="Run name for training-wandb runname", dest="run_name")
+    return parser.parse_args()
+
+
+def split_labels_into_train_test(prop_data:float=0.2):
+    labels = labels[~labels.duplicated(subset="image_name",keep="first")].sample(frac=prop_data)
+    labels['captions']=labels['translations'].map(lambda d: d.strip())
+
+    train, test = train_test_split(labels,train_size=args.train_prop)
+    return train, test
+
+
+def prepare_image_data_for_current_run(train:pd.DataFrame, test: pd.DataFrame):
+    # check if there are previous train images
+    if not os.path.isdir("flicker_data/train/images"):
+        os.makedirs("flicker_data/train/images")
+    else:
+        logger.info("removing previous files in train/")
+        for zippath in glob.iglob(os.path.join("flicker_data/train/images", '*.jpg')):
+            os.remove(zippath)
+
+    # check if there are previous test images
+    if not os.path.isdir("flicker_data/test/images"):
+        os.makedirs("flicker_data/test/images")
+    else:
+        logger.info("removing previous files in test/")
+        for zippath in glob.iglob(os.path.join("flicker_data/test/images", '*.jpg')):
+            os.remove(zippath)
+
+    # copy images to train and test folders
+    for image in tqdm(train.image_name,desc="Copying train images"):
+        shutil.copyfile(Path(BASE_PATH)/image,Path("flicker_data/train/images")/image)
+
+    # copy images to train and test folders
+    for image in tqdm(test.image_name,desc="Copying test images"):
+        shutil.copyfile(Path(BASE_PATH)/image,Path("flicker_data/test/images")/image)
+
+
 ## to avoid problems with mixed precision, taken from here https://github.com/openai/CLIP/issues/57
 def convert_models_to_fp32(model): 
     for p in model.parameters(): 
@@ -132,70 +176,43 @@ def validate(test_dl):
 
 if __name__=="__main__":
     
-    parser = argparse.ArgumentParser(description="Clip Trainer")
-    parser.add_argument("-p", "--portion",type=float,default=0.2, help="fraction of the full data to use for train-test split", dest="prop_data")
-    parser.add_argument("-tr", "--train_prop",type=float,default=0.7,help="train proportion of data", dest="train_prop")
-    parser.add_argument("-e", "--epochs",type=int,default=5, help="Number of Epochs", dest="n_epochs")
-    parser.add_argument("-bs", "--batch_size",type=int,default=45, help="Batch Size", dest="batch_size")
-    parser.add_argument("-n", "--runname",type=str,default="clip-ft", help="Run name for training-wandb runname", dest="run_name")
-    args = parser.parse_args()
-    labels=labels[~labels.duplicated(subset="image_name",keep="first")].sample(frac=args.prop_data)
-    labels['captions']=labels['translations'].map(lambda d: d.strip())
-    train,test=train_test_split(labels,train_size=args.train_prop)
+    args = parse_args()
+    # split labels into train and test
+    train, test = split_labels_into_train_test()
+
     ##make sure when using ImageFolder, idx positions match, ImageFolder will load files in ascending order by filename
     train.sort_values(by="image_name",ascending=True,inplace=True)
     test.sort_values(by="image_name",ascending=True,inplace=True)
     train.to_csv("train_labels.csv",sep=";",index=False)
     test.to_csv("test_labels.csv",sep=";",index=False)
-    
-    
+
     logger.info("1- Labels read...")
-    
-    if not os.path.isdir("flicker_data/train/images"):
-        os.makedirs("flicker_data/train/images")
-    else:
-        logger.info("removing previous files in train/")
-        for zippath in glob.iglob(os.path.join("flicker_data/train/images", '*.jpg')):
-            os.remove(zippath)
 
-    if not os.path.isdir("flicker_data/test/images"):
-        os.makedirs("flicker_data/test/images")
-    else:
-        logger.info("removing previous files in test/")
-        for zippath in glob.iglob(os.path.join("flicker_data/test/images", '*.jpg')):
-            os.remove(zippath)
+    prepare_image_data_for_current_run(train, test)
 
-    for image in tqdm(train.image_name,desc="Copying train images"):
-        shutil.copyfile(Path(BASE_PATH)/image,Path("flicker_data/train/images")/image)
-
-    for image in tqdm(test.image_name,desc="Copying test images"):
-        shutil.copyfile(Path(BASE_PATH)/image,Path("flicker_data/test/images")/image)
-
-    ##read images and preprocess    
+    # read images and preprocess    
     train_images = datasets.ImageFolder("./flicker_data/train/",transform=preprocess)
     test_images = datasets.ImageFolder("./flicker_data/test/",transform=preprocess)
-    
+
     logger.info("2- Reading Images... Done")
-        
+
     train_dataset = FlickerDataset(train.captions.values.tolist(), train_images)
     test_dataset = FlickerDataset(test.captions.values.tolist(), test_images)
     logger.info(f"Train shape {len(train_dataset)}, Test Shape {len(test_dataset)}")
-    
-    
-    ## create dataloaders
+
+
+    # create dataloaders
     tr_dl=DataLoader(train_dataset,shuffle=True,batch_size=args.batch_size)
     ts_dl=DataLoader(test_dataset,shuffle=True,batch_size=args.batch_size)
     
     logger.info("3- DataLoaders... Done")
     
-    ## before training
-    #scheduler = optim.lr_scheduler.ExponentialLR(optimizer, gamma=0.95)
-    ##original paper
     scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, len(tr_dl)*args.n_epochs)
     torch.cuda.empty_cache()
-    
-    run=wandb.init(project="clip-fine-tuning",name=f"{args.run_name}_run-exp",config={"epochs": args.n_epochs,"batch_size":args.batch_size})
-    
+
+    # init wandb runtime
+    run = wandb.init(project="clip-fine-tuning",name=f"{args.run_name}_run-exp",config={"epochs": args.n_epochs,"batch_size":args.batch_size})
+
     logger.info("4. Starting Training...")
     train_model(args.n_epochs,tr_dl,ts_dl)
     run.finish()
