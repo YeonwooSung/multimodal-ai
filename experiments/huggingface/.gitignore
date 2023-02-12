@@ -1,0 +1,7 @@
+# datasets
+data/
+dataset
+datasets/
+**/data/
+**/dataset/
+**/datasets/
