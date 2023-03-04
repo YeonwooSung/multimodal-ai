@@ -1,14 +1,16 @@
+from typing import Union
 import numpy as np
 import torch
 from tqdm import tqdm
+from dotenv import dotenv_values
 
+# custom imports
 from dataset import get_datasets
 from BLIP_models.blip import blip_decoder
 from config import Config
 
-if __name__ == "__main__":
-    device = "cuda" if torch.cuda.is_available() else "cpu"
 
+def prepare_training(device:Union[str, torch.device]):
     train_dataloader, val_dataloader, test_dataloader = get_datasets(
         train_files=Config.train_datafiles,
         val_files=Config.val_datafiles,
@@ -32,6 +34,22 @@ if __name__ == "__main__":
         weight_decay=0.05,
     )
 
+    return model, optimizer, train_dataloader, val_dataloader, test_dataloader
+
+
+if __name__ == "__main__":
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    # generate DL components for training
+    model, optimizer, train_dataloader, val_dataloader, test_dataloader = prepare_training(device)
+
+    # get dotenv config
+    env_config = dotenv_values(".env")
+    if env_config['EPOCHS'] is not None:
+        epochs = int(env_config['EPOCHS'])
+    else:
+        epochs = 50
+
+    # loop for training
     for epoch in range(50):
         losses = []
         model.train()
@@ -44,8 +62,10 @@ if __name__ == "__main__":
             losses.append(loss.item())
         train_loss = np.nanmean(losses)
 
+        # run validation and test
         model.eval()
         with torch.no_grad(), open(f"predictions/epoch_{epoch}.txt", "w") as f:
+            # run loop to iterate over validation set
             losses = []
             for image, prompt_raw in tqdm(val_dataloader, ncols=60):
                 image = image.to(device)
@@ -64,6 +84,7 @@ if __name__ == "__main__":
                 losses.append(loss.item())
             val_loss = np.nanmean(losses)
 
+            # run loop to iterate over test data
             losses = []
             for image, prompt_raw in tqdm(test_dataloader, ncols=60):
                 image = image.to(device)
