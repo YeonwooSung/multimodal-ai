@@ -1,0 +1,19 @@
+[tool.poetry]
+name = "multimodal-search"
+version = "0.1.0"
+description = "Multimodal Search System"
+authors = ["YeonwooSung <neos960518@gmail.com>"]
+readme = "README.md"
+packages = [{include = "multimodal_search"}]
+
+[tool.poetry.dependencies]
+python = "^3.9"
+torch = "^2.0.1"
+transformers = "^4.29.1"
+tokenizers = "^0.13.3"
+bitsandbytes = "^0.38.1"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
