@@ -1,0 +1,10 @@
+# dataset
+flicker_data/
+flicker_data/**
+
+# wandb
+wandb/
+
+# label files
+*.csv
+**/*.csv

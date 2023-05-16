@@ -1,0 +1,11 @@
+# datasets
+data/
+dataset
+datasets/
+**/data/
+**/dataset/
+**/datasets/
+
+# flicker dataset
+flicker_data/
+**/flicker_data/
