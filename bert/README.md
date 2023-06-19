@@ -1,6 +1,6 @@
-# Welcome!
+# MosaicBERT
 
-This benchmark covers both pre-training and fine-tuning a BERT model. With this starter code, you'll be able to do Masked Language Modeling (MLM) [pre-training](#mlm-pre-training) on the C4 dataset and classification [fine-tuning](#glue-fine-tuning) on GLUE benchmark tasks. We also provide the source code and recipe behind our [Mosaic BERT](#mosaic-bert) model, which you can train yourself using this repo.
+Codes for [MosaicBERT](https://www.mosaicml.com/blog/mosaicbert).
 
 ## Contents
 
